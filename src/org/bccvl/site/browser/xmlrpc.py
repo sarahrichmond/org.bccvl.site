@@ -7,11 +7,11 @@ from Products.CMFCore.WorkflowCore import WorkflowException
 from zope.publisher.interfaces import NotFound
 #from functools import wraps
 from decorator import decorator
-from plone.app.uuid.utils import uuidToObject
+from plone.app.uuid.utils import uuidToObject, uuidToCatalogBrain
 from plone.uuid.interfaces import IUUID
 from org.bccvl.site.interfaces import IJobTracker
 from org.bccvl.site.content.dataset import IDataset
-from org.bccvl.site.content.experiment import find_projections
+from org.bccvl.site.content.experiment import find_projections, ISDMExperiment
 from org.bccvl.site import defaults
 from org.bccvl.site.namespace import BCCPROP, BCCVOCAB, DWC, BIOCLIM, NFO
 from ordf.namespace import DC
@@ -27,6 +27,7 @@ from org.bccvl.site.browser.ws import IDataMover, IALAService
 from plone.dexterity.utils import createContentInContainer
 from rdflib.resource import Resource
 from rdflib import Literal, URIRef
+from Products.ZCatalog.interfaces import ICatalogBrain
 
 
 LOG = logging.getLogger(__name__)
@@ -69,7 +70,23 @@ def returnwrapper(f, *args, **kw):
     return ret
 
 
+def internal_download_url(ds):
+    # TODO: this should be used in .pt files as well
+    if ICatalogBrain.providedBy(ds):
+        path = ds.getPath()
+        ds = ds.getObject()
+    else:
+        path = '/'.join(ds.getPhysicalPath())
+
+    return '{}{}/@@download/file/{}'.format(
+        'http://127.0.0.1:8201', path, ds.file.filename)
+
+
 def getdsmetadata(ds):
+    # TODO: check if brain or object
+    # if ICatalogBrain.providedBy(ds):
+    #     url = ds.getURL()
+    #     uuid = ds.UID()
     # extract info about files
     md = {
         'url': ds.absolute_url(),
@@ -86,12 +103,45 @@ def getdsmetadata(ds):
             'filename': ds.file.filename,
             'file': '{}/@@download/file/{}'.format(ds.absolute_url(),
                                                    ds.file.filename),
-            'vizurl': '{}{}/@@download/file/{}'.format(
-                'http://127.0.0.1:8201',
-                '/'.join(ds.getPhysicalPath()),
-                ds.file.filename),
+            'vizurl': internal_download_url(ds),
         })
     return md
+
+
+def get_experiment_map_layers(exp):
+    """
+    return all raster and feature datesets visualisable as map layer.
+    """
+    # add presence ponits as WFS dataset
+    # and all result datasets as rasterlayers
+    # includes datagence Future Projection
+    layers = []
+    if ISDMExperiment.providedBy(exp):
+        occur = uuidToCatalogBrain(exp.species_occurrence_dataset)
+        layers.append({
+            'datasetid': occur.UID,
+            #layerid: data layer id e.g. bioclim 01,
+            'active': False,
+            'title': occur.Title,
+            'downloadurl': internal_download_url(occur),
+            'type': 'WFS',
+            })
+
+    pc = getToolByName(exp, "portal_catalog")
+    query = {"object_provides": IDataset.__identifier__,
+             "path": {"query": "/".join(exp.getPhysicalPath()), },
+             "BCCDataGenre": {"query": [BCCVOCAB["DataGenreFP"], ],
+                              "operator": "or"},
+             }
+    results = pc.searchResults(**query)
+    for brain in results:
+        layers.append({
+            'datasetid': brain.UID,
+            'active': False,
+            'title': brain.Title,
+            'downloadurl': internal_download_url(brain),
+            'type': 'WMS'})
+    return layers
 
 
 def getbiolayermetadata_query(ds):
@@ -296,6 +346,10 @@ class ExperimentManager(BrowserView):
     @returnwrapper
     def getExperiments(self, id):
         return {'data': 'experimentmetadata+datasetids+jobid'}
+
+    @returnwrapper
+    def getLayers(self):
+        return get_experiment_map_layers(self.context)
 
 
 from ZPublisher.Iterators import IStreamIterator

@@ -67,6 +67,19 @@
     </browser:view>
 
     <browser:view
+        class=".xmlrpc.ExperimentManager"
+        name="em"
+        allowed_attributes="getLayers"
+        for="org.bccvl.site.content.experiment.IExperiment"
+        permission="zope2.View" >
+
+        <browser:page
+            name="getLayers"
+            attribute="getLayers" />
+
+    </browser:view>
+
+    <browser:view
         class=".xmlrpc.JobManagerAPI"
         name="jm"
         allowed_attributes="getJobStatus"
