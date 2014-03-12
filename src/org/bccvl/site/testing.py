@@ -96,7 +96,7 @@ class BCCVLLayer(PloneSandboxLayer):
         current = portal.datasets.environmental.current
         g = IGraph(current)
         for fid, i in ((URIRef("http://example.com/file%02d" % i), i)
-                    for i in range(1, 3)):
+                       for i in range(1, 3)):
             f = Graph(identifier=fid)
             f.add((fid,  BIOCLIM['bioclimVariable'], BIOCLIM['B%02d' % i]))
             f.add((fid,  NFO['fileName'], Literal('file%02d' % i)))

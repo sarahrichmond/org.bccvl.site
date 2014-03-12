@@ -1,11 +1,19 @@
 
+Test Setup
+==========
+
 First import some necessary stuff.
 
+    >>> import transaction
     >>> import xmlrpclib
     >>> from pprint import pprint
     >>> from org.bccvl.site import defaults
     >>> from plone.uuid.interfaces import IUUID
     >>> portal = layer['portal']
+
+
+Dataset Manager API
+===================
 
 Get our dataset object set up in the test fixture.
 
@@ -51,6 +59,89 @@ have to pass in a parameter to tell it in which object we are interested.
      'vizurl': 'http://127.0.0.1:8201/plone/datasets/species/ABT/occurrence.csv/@@download/file/occurrence.csv'}
     >>> res['id'] == abtuid
     True
+
+
+Experiment Manager API
+======================
+
+First step is to set up some experiments and results to test.
+For simplicity we just create the content objects.
+
+    >>> ef = portal['experiments']
+    >>> from plone.dexterity.utils import createContentInContainer
+    >>> exp = createContentInContainer(ef,
+    ...                                'org.bccvl.content.sdmexperiment',
+    ...                                title=u"test experiment",
+    ...                                id='testsdm')
+
+Commit changes to make them available in server thread
+
+    >>> transaction.commit()
+
+Ok we have an experiment but as there is no occurrence data configured
+or results available we should get an empty set of layers
+
+    >>> from plone.app.testing.interfaces import SITE_OWNER_NAME
+    >>> from plone.app.testing.interfaces import SITE_OWNER_PASSWORD
+    >>> rpcurl = exp.absolute_url() + '/em'
+    >>> rpcurl = rpcurl.replace('://', '://%s:%s@' % (SITE_OWNER_NAME,
+    ...                                               SITE_OWNER_PASSWORD))
+    >>> proxy = xmlrpclib.ServerProxy(rpcurl)
+    >>> res = proxy.getLayers()
+    >>> res
+    []
+
+Let's configure some occurrence data
+
+    >>> exp.species_occurrence_dataset = abtuid
+    >>> transaction.commit()
+    >>> res = proxy.getLayers()
+    >>> pprint(res)
+    [{'active': False,
+      'datasetid': '...',
+      'downloadurl': 'http://.../ABT/occurrence.csv/@@download/file/occurrence.csv',
+      'title': 'ABT',
+      'type': 'WFS'}]
+
+Let's add some result datasets
+
+    >>> from gu.z3cform.rdf.interfaces import IGraph, IORDF
+    >>> from org.bccvl.site.namespace import BCCPROP, BCCVOCAB
+    >>> from zope.component import getUtility
+    >>> from plone.namedfile import NamedFile
+
+create resultset container and one dataset
+
+    >>> expres = createContentInContainer(exp,
+    ...                                   'gu.repository.content.RepositoryItem',
+    ...                                   title=u"testsdm result")
+    >>> ds1 = createContentInContainer(expres,
+    ...                                'org.bccvl.content.dataset',
+    ...                                title=u"dataset 1.tif")
+
+populate file field on dataset (otherwise we can't generate a
+downloadurl) and set some metadata
+TODO: test with None file field as well
+
+    >>> ds1.file = NamedFile('dummy data', filename=u'dataset 1.tif')
+    >>> md = IGraph(ds1)
+    >>> md.add((md.identifier, BCCPROP['datagenre'], BCCVOCAB['DataGenreFP']))
+    >>> getUtility(IORDF).getHandler().put(md)
+    >>> ds1.reindexObject()
+    >>> transaction.commit()
+    >>> res = proxy.getLayers()
+    >>> pprint(res)
+    [{'active': False,
+      'datasetid': '...',
+      'downloadurl': 'http://.../ABT/occurrence.csv/@@download/file/occurrence.csv',
+      'title': 'ABT',
+      'type': 'WFS'},
+     {'active': False,
+      'datasetid': '...',
+      'downloadurl': 'http://.../@@download/file/dataset 1.tif',
+      'title': 'dataset 1.tif',
+      'type': 'WMS'}]
+
 
 
 TODO: add test cases that fail because of restricted access

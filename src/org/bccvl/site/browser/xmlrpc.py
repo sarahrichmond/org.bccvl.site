@@ -118,14 +118,15 @@ def get_experiment_map_layers(exp):
     layers = []
     if ISDMExperiment.providedBy(exp):
         occur = uuidToCatalogBrain(exp.species_occurrence_dataset)
-        layers.append({
-            'datasetid': occur.UID,
-            #layerid: data layer id e.g. bioclim 01,
-            'active': False,
-            'title': occur.Title,
-            'downloadurl': internal_download_url(occur),
-            'type': 'WFS',
-            })
+        if occur:
+            layers.append({
+                'datasetid': occur.UID,
+                #layerid: data layer id e.g. bioclim 01,
+                'active': False,
+                'title': occur.Title,
+                'downloadurl': internal_download_url(occur),
+                'type': 'WFS',
+                })
 
     pc = getToolByName(exp, "portal_catalog")
     query = {"object_provides": IDataset.__identifier__,
